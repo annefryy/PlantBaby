@@ -1,93 +1,150 @@
 import SwiftUI
 
 struct DashboardView: View {
-    let stats = [
-        ("Temp", "24°C", "thermometer"),
-        ("Humidity", "76%", "humidity"),
-        ("CO₂", "614", "leaf")
-    ]
-    let plants = [
-        ("Tomato", "leaf"),
-        ("Cucumber", "leaf"),
-        ("Bell pepper", "leaf")
-    ]
+    @EnvironmentObject var store: PlantStore
+    @State private var searchText = ""
+    @State private var showingPlantDetail: Plant? = nil
+    
+    var filteredPlants: [Plant] {
+        if searchText.isEmpty {
+            return store.plants
+        } else {
+            return store.plants.filter { plant in
+                plant.name.localizedCaseInsensitiveContains(searchText) ||
+                (plant.scientificName?.localizedCaseInsensitiveContains(searchText) ?? false)
+            }
+        }
+    }
+    
     var body: some View {
-        VStack(spacing: 0) {
-            // Top Bar
-            HStack {
-                Button(action: {}) {
-                    Image(systemName: "line.3.horizontal")
-                        .font(.title2)
-                        .foregroundColor(.primary)
+        NavigationView {
+            List {
+                // Care Summary Section
+                Section {
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("\(store.plantsNeedingWater)")
+                                .font(.title)
+                                .foregroundColor(.blue)
+                            Text("Need Water")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        VStack(alignment: .leading) {
+                            Text("\(store.plantsNeedingFertilizer)")
+                                .font(.title)
+                                .foregroundColor(.orange)
+                            Text("Need Fertilizer")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
+                        VStack(alignment: .leading) {
+                            Text("\(store.totalPlants)")
+                                .font(.title)
+                                .foregroundColor(.green)
+                            Text("Total Plants")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    .padding(.vertical, 8)
                 }
-                Spacer()
-                Text("My plants")
-                    .font(.title.bold())
-                Spacer()
-                Button(action: {}) {
-                    Image(systemName: "person.crop.circle")
-                        .font(.title2)
-                        .foregroundColor(.primary)
+                
+                // Plants Section
+                Section {
+                    if filteredPlants.isEmpty {
+                        Text("No plants found")
+                            .foregroundColor(.gray)
+                            .italic()
+                    } else {
+                        ForEach(filteredPlants) { plant in
+                            PlantRow(plant: plant)
+                                .onTapGesture {
+                                    showingPlantDetail = plant
+                                }
+                        }
+                    }
+                } header: {
+                    Text("My Plants")
                 }
             }
-            .padding([.horizontal, .top])
-            
-            // Stats
-            HStack(spacing: 16) {
-                ForEach(stats, id: \.(0)) { stat in
-                    StatCardView(title: stat.0, value: stat.1, icon: stat.2)
-                }
+            .searchable(text: $searchText, prompt: "Search plants")
+            .navigationTitle("Dashboard")
+            .sheet(item: $showingPlantDetail) { plant in
+                PlantDetailView(plant: plant)
             }
-            .padding(.vertical)
+        }
+    }
+}
+
+struct PlantRow: View {
+    let plant: Plant
+    
+    var body: some View {
+        HStack(spacing: 15) {
+            // Plant Image
+            if let image = plant.uiImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Image(systemName: "leaf.fill")
+                    .resizable()
+                    .scaledToFit()
+                    .padding(12)
+                    .frame(width: 60, height: 60)
+                    .background(Color.green.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            }
             
-            // Alerts
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Alerts")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(plant.name)
                     .font(.headline)
-                AlertCardView(plantName: "Eggplant", message: "This plant needs water (110ml)")
-            }
-            .padding(.horizontal)
-            
-            // Plant Cards
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(plants, id: \.(0)) { plant in
-                        PlantCardView(plantName: plant.0, imageName: plant.1, isSelected: plant.0 == "Cucumber")
+                
+                if let scientificName = plant.scientificName {
+                    Text(scientificName)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
+                
+                // Care Status
+                HStack(spacing: 12) {
+                    if let lastWatered = plant.lastWatered {
+                        Label(
+                            "\(Calendar.current.dateComponents([.day], from: lastWatered, to: Date()).day ?? 0)d",
+                            systemImage: "drop.fill"
+                        )
+                        .font(.caption2)
+                        .foregroundColor(.blue)
+                    }
+                    
+                    if let lastFertilized = plant.lastFertilized {
+                        Label(
+                            "\(Calendar.current.dateComponents([.month], from: lastFertilized, to: Date()).month ?? 0)m",
+                            systemImage: "leaf.fill"
+                        )
+                        .font(.caption2)
+                        .foregroundColor(.orange)
                     }
                 }
-                .padding(.horizontal)
             }
-            .padding(.top)
             
             Spacer()
             
-            // Bottom Navigation
-            HStack {
-                Spacer()
-                Image(systemName: "leaf")
-                    .font(.title2)
-                Spacer()
-                ZStack {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 48, height: 48)
-                    Image(systemName: "plus")
-                        .foregroundColor(.white)
-                        .font(.title2)
-                }
-                Spacer()
-                Image(systemName: "chart.bar")
-                    .font(.title2)
-                Spacer()
-            }
-            .padding(.vertical, 8)
-            .background(Color(.systemGray6))
+            Image(systemName: "chevron.right")
+                .foregroundColor(.gray)
         }
+        .padding(.vertical, 4)
     }
 }
 
 struct DashboardView_Previews: PreviewProvider {
     static var previews: some View {
         DashboardView()
+            .environmentObject(PlantStore())
     }
 } 
